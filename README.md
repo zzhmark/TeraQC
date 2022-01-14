@@ -18,5 +18,23 @@ Thus we come up with an idea that uses intensity distribution randomly collected
 ## Usage
 TODO
 
+
+
+## Folder Structure
+
+
+
+```
+├── data                    # Images for test and validation (not shown)
+├── build                   # Vaa3D plugin build output (not shown)
+├── src                     # Source files of the Vaa3D plugin
+├── validation              # Python scripts to validate the algorithm and results
+├── LICENSE
+└── README.md
+```
+
+
+
 Zuohan Zhao  
 2020/1/9
+
