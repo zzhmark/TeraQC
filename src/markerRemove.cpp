@@ -1,0 +1,4 @@
+#ifndef MARKERREMOVE_CPP
+#define MARKERREMOVE_CPP
+
+#endif // MARKERREMOVE_CPP

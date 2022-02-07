@@ -1,8 +1,15 @@
+/*
+ * Copyright 2022 Zuohan Zhao
+ * SPDX-License-Identifier: Apache-2.0
+*/
+
 #ifndef TERAQC_PLUGIN_H
 #define TERAQC_PLUGIN_H
 
 #include <QObject>
 #include <v3d_interface.h>
+#include "TeraQCTypes.h"
+
 
 class TeraQCPlugin : public QObject, public V3DPluginInterface2_1
 {
@@ -23,6 +30,10 @@ public:
                 V3DPluginArgList& output,
                 V3DPluginCallback2& callback,
                 QWidget* parent);
+
+protected:
+    QcImage imgInput, imgMarker, imgMaxima;
+
 };
 
 #endif // TERAQC_PLUGIN_H
