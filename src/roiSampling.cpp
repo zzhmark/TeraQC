@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-#include "findLocalMaxima.h"
+#include "roiSampling.h"
 #include "opencv2/opencv.hpp"
 
 using namespace std;

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-#include "findMarkers.h"
+#include "preprocessing.h"
 #include "opencv2/opencv.hpp"
 
 using namespace std;
@@ -220,6 +220,43 @@ bool findMarkers(const QcImage& input, QcImage& output, const QVariantMap& param
         // z interpolation
         morphologyEx(matOutputBuffer, matOutputBuffer, MORPH_CLOSE, k3);
 
+        return true;
+    }
+    catch(...)
+    {
+        cerr << "ERROR: Unkown exception, probably related to OPENCV functions." << endl;
+        output.clear();
+        return false;
+    }
+}
+
+bool masking(const QcImage& input, QcImage& output, const QcImage& mask)
+{
+    try
+    {
+        const auto& sz = input.sz;
+        output.clear();
+        output.create(sz, input.datatype);
+        int cvtype;
+        switch (input.datatype)
+        {
+            case V3D_UINT8:
+                cvtype = CV_8UC1;
+                break;
+            case V3D_UINT16:
+                cvtype = CV_16UC1;
+                break;
+            case V3D_FLOAT32:
+                cvtype = CV_32FC1;
+                break;
+            default:
+                cvtype = CV_8UC1;
+
+        }
+        auto matInputBuffer = Mat(sz[2], sz[1] * sz[0], cvtype, (void*)input.buffer);
+        auto matOutputBuffer = Mat(sz[2], sz[1] * sz[0], cvtype, (void*)output.buffer);
+        auto matMaskBuffer = Mat(sz[2], sz[1] * sz[0], CV_8UC1, (void*)mask.buffer);
+        bitwise_and(matInputBuffer, matInputBuffer, matOutputBuffer, matMaskBuffer);
         return true;
     }
     catch(...)

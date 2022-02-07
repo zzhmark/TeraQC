@@ -26,16 +26,16 @@ CONFIG(debug, debug|release){
 #include the headers used in the project
 HEADERS	+= TeraQCPlugin.h \
     TeraQCTypes.h \
-    findLocalMaxima.h \
-    findMarkers.h \
-    loadUtils.h
+    loadUtils.h \
+    preprocessing.h \
+    roiSampling.h
 
 #include the source files used in the project
 SOURCES	+= TeraQCPlugin.cpp \
-    findLocalMaxima.cpp \
-    findMarkers.cpp \
     loadUtils.cpp \
-    $$V3D_SRC/v3d_main/basic_c_fun/v3d_message.cpp
+    $$V3D_SRC/v3d_main/basic_c_fun/v3d_message.cpp \
+    preprocessing.cpp \
+    roiSampling.cpp
 
 #specify target name and directory
 TARGET	= $$qtLibraryTarget(TeraQC)
