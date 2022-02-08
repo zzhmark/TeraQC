@@ -5,7 +5,7 @@ CONFIG += qt plugin warn_off
 PLUGIN_DEST = D:/Vaa3D/Vaa3D_V4.001_Windows_MSVC_64bit/plugins
 V3D_SRC = D:/Vaa3D/v3d_external
 OPENCV = D:/opencv/build
-
+#OPENCV = D:/libs/opencv-3.4
 
 #include necessary paths
 INCLUDEPATH	+= $$V3D_SRC/v3d_main/basic_c_fun \
@@ -22,6 +22,9 @@ CONFIG(debug, debug|release){
 } else {
     LIBS += -L$$OPENCV/x64/vc12/lib -lopencv_world310
 }
+
+#LIBS += -L$$OPENCV/x64/vc12/lib \
+#    -lopencv_core340 -lopencv_imgproc340
 
 #include the headers used in the project
 HEADERS	+= TeraQCPlugin.h \

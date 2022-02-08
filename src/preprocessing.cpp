@@ -9,6 +9,118 @@
 using namespace std;
 using namespace cv;
 
+
+/*
+ * Custom Canny Edge Detection
+ * This function provides for 16bit images, using opencv.
+ * It's only available in opencv after 3.2. To be compatible with
+ * qt-4.8.6 and msvc120, it has to be realized with functions in opencv 3.1.
+ * It assumes the pixel type to be 16bit and calculate gradient using float32.
+ * The thresholds are defined as ratios of the maxiumal magnitude, not fixed values.
+ *
+ */
+void Canny16bit(InputArray in, OutputArray edges, double threshold1, double threshold2)
+{
+    assert(threshold1 < threshold2 && threshold1 >= 0 && threshold2 <= 1);
+    int di[5] = {1, 1, 0,-1,-1};
+    int dj[5] = {0,-1,-1,-1, 0};
+    Mat dx, dy, phi, mag;
+    Sobel(in, dx, CV_32F, 1, 0);
+    Sobel(in, dy, CV_32F, 0, 1);
+    magnitude(dx, dy, mag);
+    phase(dx, dy, phi);
+    double min, max;
+    minMaxLoc(mag, &min, &max);
+    auto low = max * threshold1;
+    auto high = max * threshold2;
+    // NMS
+    Mat nms = mag.clone();
+    for (int i = 1; i < mag.rows - 1; ++i)
+    {
+        for (int j = 1; j < mag.cols - 1; ++j)
+        {
+            auto g = mag.at<float>(i, j);
+            if (g == 0.0f) continue;
+            auto t = phi.at<float>(i, j);
+            int ind;
+            double k;
+            if (t >= -CV_PI/2 && t < -CV_PI/4)
+            {
+                k = tan(t + CV_PI/2);
+                ind = 0;
+            }
+            else if (t >= -CV_PI/4 && t < 0)
+            {
+                k = tan(t + CV_PI/4);
+                ind = 1;
+            }
+            else if (t >= 0 && t < CV_PI/4)
+            {
+                k = tan(t);
+                ind = 2;
+            }
+            else
+            {
+                k = tan(t - CV_PI/4);
+                ind = 3;
+            }
+            auto g0u = mag.at<float>(i+di[ind+1], j+dj[ind+1]);
+            auto g0d = mag.at<float>(i+di[ind], j+dj[ind]);
+            auto g1u = mag.at<float>(i-di[ind+1], j-dj[ind+1]);
+            auto g1d = mag.at<float>(i-di[ind], j-dj[ind]);
+            auto g0 = k * (g0u - g0d) + g0d;
+            auto g1 = k * (g1u - g1d) + g1d;
+            if (g <= g0 || g <= g1) nms.at<float>(i, j) = 0.0f;
+        }
+    }
+
+    // double threshold
+    QQueue<QPoint> q;
+    for (int i = 0; i < nms.rows; ++i)
+    {
+        for (int j = 0; j < nms.cols; ++j)
+        {
+            auto& x = nms.ptr<float>(i)[j];
+            if (x > high)
+            {
+                x = FLT_MAX;
+                // seeds
+                q.enqueue(QPoint(i, j));
+            }
+            if (x < low)
+                x = 0.0f;
+        }
+    }
+
+    // linking
+    while (!q.isEmpty())
+    {
+        auto h = q.dequeue();
+        for (int m = -1; m <= 1; ++m)
+            for (int n = -1; n <= 1; ++n)
+            {
+                auto i = h.y() + m;
+                auto j = h.x() + n;
+                if (i < 0 || i >= nms.rows || j < 0 || j >= nms.cols) continue;
+                auto& x = nms.ptr<float>(i)[j];
+                if (x == FLT_MAX || x == 0.0f) continue;
+                x = FLT_MAX;
+                q.enqueue(QPoint(i, j));
+            }
+    }
+
+    // clearing
+    for (int i = 0; i < nms.rows; ++i)
+        for (int j = 0; j < nms.cols; ++j)
+        {
+            auto& x = nms.ptr<float>(i)[j];
+            if (x < FLT_MAX) x = 0.0f;
+        }
+
+    convertScaleAbs(nms, edges, UCHAR_MAX / FLT_MAX);
+}
+
+
 /*
  * Test if the line meet specified standards
  *
@@ -113,7 +225,11 @@ bool testLine(const Vec4i& line,
  *
  * lineWidth: the lineWidth to draw markers in the mask;
  *
- * extendRatio: drawn lines are extended by this ratio on both ends.
+ * extendRatio: drawn lines are extended by this ratio on both ends;
+ *
+ * cannyMin & cannyMax: canny thresholds, as ratios of max sobel edge gradient magnitude;
+ *
+ * sigma: gaussian filter param before sobel, kernel size as 3 times of this.
  *
 */
 
@@ -122,7 +238,7 @@ bool findMarkers(const QcImage& input, QcImage& output, const QVariantMap& param
     // used params
     int se1, se2, se3, houghDistanceRes, houghAngleRes, houghThreshold,
             houghMinLineLength, houghMaxLineGap, lineWidth;
-    double filterMinDistance, filterAngleLimit, zThickness, extendRatio;
+    double filterMinDistance, filterAngleLimit, zThickness, extendRatio, cannyMin, cannyMax, sigma;
 
     // argument parsing
     try {
@@ -134,12 +250,15 @@ bool findMarkers(const QcImage& input, QcImage& output, const QVariantMap& param
         houghThreshold = params.value("houghThreshold", 100).toUInt();
         houghMinLineLength = params.value("houghMinLineLength", 100).toUInt();
         houghMaxLineGap = params.value("houghMaxLineGap", 1).toUInt();
-        lineWidth = params.value("lineWidth", 5).toUInt();
+        lineWidth = params.value("lineWidth", 3).toUInt();
 
         extendRatio = params.value("extendRatio", 0.1).toDouble();
         filterMinDistance = params.value("filterMinDistance", 300.0).toDouble();
-        filterAngleLimit = params.value("angleLimit", 10.0).toDouble();
-        zThickness = params.value("zThickness", 3.0).toDouble();
+        filterAngleLimit = params.value("angleLimit", 5.0).toDouble();
+        zThickness = params.value("zThickness", 2.0).toDouble();
+        cannyMin = params.value("cannyMin", 0.1).toDouble();
+        cannyMax = params.value("cannyMax", 0.3).toDouble();
+        sigma = params.value("sigma", 1.0).toDouble();
     }  catch (...) {
         cerr << "Argument Parsing Error. Please check the argument list." << endl;
         return false;
@@ -157,50 +276,50 @@ bool findMarkers(const QcImage& input, QcImage& output, const QVariantMap& param
         switch (input.datatype)
         {
             case V3D_UINT8:
-                cvtype = CV_8UC1;
+                cvtype = CV_8U;
                 break;
             case V3D_UINT16:
-                cvtype = CV_16UC1;
+                cvtype = CV_16U;
                 break;
             case V3D_FLOAT32:
-                cvtype = CV_32FC1;
+                cvtype = CV_32F;
                 break;
             default:
-                cvtype = CV_8UC1;
+                cvtype = CV_8U;
 
         }
         auto matInputBuffer = Mat(sz[2], sz[1] * sz[0], cvtype, (void*)input.buffer);
-        auto matOutputBuffer = Mat(sz[2], sz[1] * sz[0], CV_8UC1, (void*)output.buffer);
+        auto matOutputBuffer = Mat(sz[2], sz[1] * sz[0], CV_8U, (void*)output.buffer);
 
         auto k1 = getStructuringElement(MORPH_ELLIPSE, Size(se1, se1));
         auto k2 = getStructuringElement(MORPH_ELLIPSE, Size(se2, se2));
         auto k3 = getStructuringElement(MORPH_RECT, Size(1, se3));
+        auto gk = int(abs(sigma*3));
+        if (gk % 2 == 0) ++gk;
         // iterate over all slices to do the smotthing and sobel edge detection (with OPENCV)
         for (int i = 0; i < sz[2]; ++i)
         {
             auto inputSlice = matInputBuffer.row(i).reshape(0, sz[1]);
             auto outputSlice = matOutputBuffer.row(i).reshape(0, sz[1]);
-            Mat closed, grad_x, grad_y, edges;
-            morphologyEx(inputSlice, closed, MORPH_CLOSE, k1);
-            Sobel(closed, grad_x, CV_32F, 1, 0);
-            Sobel(closed, grad_y, CV_32F, 0, 1);
-            magnitude(grad_x, grad_y, edges);
-            double min, max;
-            minMaxLoc(edges, &min, &max);
-            convertScaleAbs(edges, outputSlice, 255 / max);
-
-        }
-
-        // otsu
-        threshold(matOutputBuffer, matOutputBuffer, 0, 255, THRESH_OTSU);
-        // iterate again to compute hough transform and draw masks
-        for (int i = 0; i < sz[2]; ++i)
-        {
-            auto slice = matOutputBuffer.row(i).reshape(0, sz[1]);
+//            Mat smooth, grad_x, grad_y, edges, canny;
+            Mat smooth, edges;
+            morphologyEx(inputSlice, smooth, MORPH_CLOSE, k1);
+            GaussianBlur(smooth, smooth, Size(gk, gk), sigma);
+            // the canny function is only available after opencv 3.2
+            // so use the DIY canny instead
+//            Sobel(smooth, grad_x, CV_16S, 1, 0);
+//            Sobel(smooth, grad_y, CV_16S, 0, 1);
+//            magnitude(grad_x, grad_y, edges);
+//            double min, max;
+//            minMaxLoc(edges, &min, &max);
+//            Canny(grad_x, grad_y, edges, cannyMin * max, cannyMax * max, true);
+            Canny16bit(smooth, edges, cannyMin, cannyMax);
+            morphologyEx(edges, edges, MORPH_CLOSE, k2);
             vector<Vec4i> lines;
-            HoughLinesP(slice, lines, houghDistanceRes, M_PI / houghAngleRes,
+            HoughLinesP(edges, lines, houghDistanceRes, M_PI / houghAngleRes,
                         houghThreshold, houghMinLineLength, houghMaxLineGap);
-            slice = 0;
+
+            outputSlice = 0;
             for (int j = 0; j < lines.size(); ++j)
                 if (testLine(lines[j], i, filterMinDistance, filterAngleLimit,
                              QVector3D(sz[0], sz[1], sz[2]), zThickness))
@@ -212,7 +331,7 @@ bool findMarkers(const QcImage& input, QcImage& output, const QVariantMap& param
                     p1 = p1 + d * extendRatio;
                     p2 = p2 - d * extendRatio;
                     // draw
-                    line(slice, Point(p1.x(), p1.y()), Point(p2.x(), p2.y()), 255, lineWidth);
+                    line(outputSlice, Point(p1.x(), p1.y()), Point(p2.x(), p2.y()), UCHAR_MAX, lineWidth);
                 }
 
         }
@@ -241,21 +360,20 @@ bool masking(const QcImage& input, QcImage& output, const QcImage& mask)
         switch (input.datatype)
         {
             case V3D_UINT8:
-                cvtype = CV_8UC1;
+                cvtype = CV_8U;
                 break;
             case V3D_UINT16:
-                cvtype = CV_16UC1;
+                cvtype = CV_16U;
                 break;
             case V3D_FLOAT32:
-                cvtype = CV_32FC1;
+                cvtype = CV_32F;
                 break;
             default:
-                cvtype = CV_8UC1;
-
+                cvtype = CV_8U;
         }
         auto matInputBuffer = Mat(sz[2], sz[1] * sz[0], cvtype, (void*)input.buffer);
         auto matOutputBuffer = Mat(sz[2], sz[1] * sz[0], cvtype, (void*)output.buffer);
-        auto matMaskBuffer = Mat(sz[2], sz[1] * sz[0], CV_8UC1, (void*)mask.buffer);
+        auto matMaskBuffer = Mat(sz[2], sz[1] * sz[0], CV_8U, (void*)mask.buffer);
         bitwise_and(matInputBuffer, matInputBuffer, matOutputBuffer, matMaskBuffer);
         return true;
     }
