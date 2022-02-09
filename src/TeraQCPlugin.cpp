@@ -21,9 +21,9 @@ QStringList TeraQCPlugin::menulist() const
 QStringList TeraQCPlugin::funclist() const
 {
     return QStringList()
-            << tr("findMarkers")
-            << tr("removeMarkers")
+            << tr("preprocess")
             << tr("findLocalMaxima")
+            << tr("one-pot")
             << tr("help");
 }
 
@@ -58,13 +58,15 @@ bool TeraQCPlugin::dofunc(const QString& func_name,
             cout << "\tLoading image " << inlist->at(0) << ".." << endl;
             if(!loader(inlist->at(0), imgInput))
                 throw runtime_error("Loading failed.");
+            return info.baseName();
         }
         else if (info.isDir())
         {
             cout << "\tLoading teraconverted images in " << inlist->at(0) << ".." << endl;
-            if (!load_teraconvert_dir(inlist->at(0), imgInput,
+            if (!loadTeraconvert(inlist->at(0), imgInput,
                                       loader, params.value("datatype", V3D_UINT16).toInt()))
                 throw runtime_error("Loading failed.");
+            return QDir(inlist->at(0)).dirName();
         } else
             throw runtime_error("Illegal loading path. Neither an image nor teraconvert data.");
     };
@@ -75,15 +77,16 @@ bool TeraQCPlugin::dofunc(const QString& func_name,
             throw runtime_error("Finding markers failed.");
     };
 
-    auto SAVE_IMAGE = [&](QcImage& img) {
-        cout << "\tSaving the mask to path " << outlist->at(0) << endl;
-        if (!simple_saveimage_wrapper(callback, outlist->at(0), img.buffer, img.sz, img.datatype))
+    auto SAVE_IMAGE = [&](QcImage& img, const QString& path) {
+        cout << "\tSaving the mask to path " << path.toStdString() << endl;
+        if (!simple_saveimage_wrapper(callback, path.toStdString().c_str(),
+                                      img.buffer, img.sz, img.datatype))
             throw runtime_error("Saving failed");
     };
 
-    auto REMOVE_MARKERS = [&]() {
+    auto APPLY_MARKERS = [&](bool invert=true) {
         cout << "\tRemove markers from the input image.." << endl;
-        if(!masking(imgInput, imgWoMarker, imgMarker))
+        if(!masking(imgInput, imgMasked, imgMarker, invert))
             throw runtime_error("Removing markers failed.");
     };
 
@@ -91,95 +94,81 @@ bool TeraQCPlugin::dofunc(const QString& func_name,
         findLocalMaxima(img, imgMaxima, params);
     };
 
-    // commands
+    // arguments
     if (input.size() > 1)
     {
         arglist = (vector<char*>*)(input.at(1).p);
         for (int i = 0; i < arglist->size(); i+=2)
-        params[arglist->at(i)] = arglist->at(i + 1);
+            params[arglist->at(i)] = arglist->at(i + 1);
     }
 
-    if (func_name == tr("findMarkers"))
+    // commands
+    try
     {
-        try
+        if (func_name == tr("preprocess"))
         {
-            cout << "[TeraQC Plugin: Find Markers]" << endl;
-
-            LOAD_IMAGE();
+            cout << "[TeraQC Plugin: Preprocessing]" << endl;
+            auto mode = params.value("mode", "default").toString();
+            /* mode
+             * default: output the mask & image wo mask
+             * onlyMarker: only the 8bit marker mask
+             * onlyRemove: only the image wo markers
+             * validation: same as default but also output 8bit xy projection to see the effect
+            */
+            auto prefix = outlist->at(0) + LOAD_IMAGE();
             FIND_MARKERS();
-            SAVE_IMAGE(imgMarker);
-
-            imgInput.clear();
-            imgMarker.clear();
+            if (mode != "onlyRemove")
+                SAVE_IMAGE(imgMarker, prefix + '_mask.tif');
+            if (mode != "onlyMarker")
+            {
+                if (mode == "validation")
+                {
+                    QcImage proj;
+                    APPLY_MARKERS(false);
+                    if (!maxProjection8bit(imgMasked, proj))
+                        throw "Something wrong with projection.";
+                    SAVE_IMAGE(proj, prefix + "_marker_2d.tif");
+                    proj.clear();
+                    APPLY_MARKERS();
+                    if (!maxProjection8bit(imgMasked, proj))
+                        throw "Something wrong with projection.";
+                    SAVE_IMAGE(proj, prefix + "_removed_2d.tif");
+                }
+                else
+                    APPLY_MARKERS();
+                SAVE_IMAGE(imgMasked, prefix + "_removed.tif");
+            }
             cout << "Done." << endl;
         }
-        catch(exception& e)
-        {
-            cerr << "ERROR: " << e.what() << endl;
-            imgInput.clear();
-            imgMarker.clear();
-            return false;
-        }
-    }
-    else if (func_name == tr("removeMarkers"))
-    {
-        try
-        {
-            cout << "[TeraQC Plugin: Remove Markers]" << endl;
-
-            LOAD_IMAGE();
-            FIND_MARKERS();
-            REMOVE_MARKERS();
-            SAVE_IMAGE(imgWoMarker);
-
-            imgInput.clear();
-            imgMarker.clear();
-            cout << "Done." << endl;
-        }
-        catch(exception& e)
-        {
-            cerr << "ERROR: " << e.what() << endl;
-            imgInput.clear();
-            imgMarker.clear();
-            return false;
-        }
-    }
-    else if (func_name == tr("findLocalMaxima"))
-    {
-        try
+        else if (func_name == tr("findLocalMaxima"))
         {
             cout << "[TeraQC Plugin: Find Local Maxima]" << endl;
-            LOAD_IMAGE();
+            auto prefix = outlist->at(0) + LOAD_IMAGE();
             QcImage* pImg;
             if (params.value("preprocessing", "y").toString().toLower().startsWith("y"))
             {
                 FIND_MARKERS();
-                REMOVE_MARKERS();
-                pImg = &imgWoMarker;
+                APPLY_MARKERS();
+                pImg = &imgMasked;
             }
             else pImg = &imgInput;
-            SAVE_IMAGE(imgMaxima);
+            SAVE_IMAGE(imgMaxima, prefix + "_maxima.tif");
             FIND_LOCAL_MAXIMA(*pImg);
-            imgInput.clear();
-            imgMarker.clear();
-            imgWoMarker.clear();
-            imgMaxima.clear();
             cout << "Done." << endl;
         }
-        catch(exception& e)
+        else if (func_name == tr("one-pot"))
         {
-            cerr << "ERROR: " << e.what() << endl;
-            imgInput.clear();
-            imgMarker.clear();
-            imgWoMarker.clear();
-            imgMaxima.clear();
-            cout << "Done." << endl;
-            return false;
+            // TODO
         }
+        else
+        {
+            // TODO
+        }
+        return true;
     }
-    else
+    catch(exception& e)
     {
-        cout << "TODO" << endl;
+        cerr << "ERROR: " << e.what() << endl;
+        return false;
     }
-    return true;
 }

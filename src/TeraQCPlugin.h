@@ -31,7 +31,7 @@ public:
                 QWidget* parent);
 
 protected:
-    QcImage imgInput, imgMarker, imgWoMarker, imgMaxima;
+    QcImage imgInput, imgMarker, imgMasked, imgMaxima;
 
 };
 

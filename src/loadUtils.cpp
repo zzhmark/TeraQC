@@ -28,7 +28,7 @@ using namespace std;
  *
  */
 
-bool load_teraconvert_dir(const QString& path, QcImage& output, const Loader& loader, int datatype)
+bool loadTeraconvert(const QString& path, QcImage& output, const Loader& loader, int datatype)
 {
     QcImage block;
 

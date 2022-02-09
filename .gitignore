@@ -1,4 +1,6 @@
 .vscode
 data
+validation/results
+validation/__pycache__
 build*
 validation/.idea

@@ -13,6 +13,6 @@
 // loader type define (for convenient loading image with any callback)
 typedef std::function<bool(const char*, QcImage&)> Loader;
 
-bool load_teraconvert_dir(const QString& path, QcImage& img, const Loader& loader, int datatype);
+bool loadTeraconvert(const QString& path, QcImage& img, const Loader& loader, int datatype);
 
 #endif // LOADUTILS_H

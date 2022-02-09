@@ -252,12 +252,12 @@ bool findMarkers(const QcImage& input, QcImage& output, const QVariantMap& param
         houghMaxLineGap = params.value("houghMaxLineGap", 1).toUInt();
         lineWidth = params.value("lineWidth", 3).toUInt();
 
-        extendRatio = params.value("extendRatio", 0.1).toDouble();
+        extendRatio = params.value("extendRatio", 0.2).toDouble();
         filterMinDistance = params.value("filterMinDistance", 300.0).toDouble();
         filterAngleLimit = params.value("angleLimit", 5.0).toDouble();
         zThickness = params.value("zThickness", 2.0).toDouble();
-        cannyMin = params.value("cannyMin", 0.1).toDouble();
-        cannyMax = params.value("cannyMax", 0.3).toDouble();
+        cannyMin = params.value("cannyMin", 0.05).toDouble();
+        cannyMax = params.value("cannyMax", 0.15).toDouble();
         sigma = params.value("sigma", 1.0).toDouble();
     }  catch (...) {
         cerr << "Argument Parsing Error. Please check the argument list." << endl;
@@ -349,7 +349,7 @@ bool findMarkers(const QcImage& input, QcImage& output, const QVariantMap& param
     }
 }
 
-bool masking(const QcImage& input, QcImage& output, const QcImage& mask)
+bool masking(const QcImage& input, QcImage& output, const QcImage& mask, bool invert)
 {
     try
     {
@@ -374,7 +374,55 @@ bool masking(const QcImage& input, QcImage& output, const QcImage& mask)
         auto matInputBuffer = Mat(sz[2], sz[1] * sz[0], cvtype, (void*)input.buffer);
         auto matOutputBuffer = Mat(sz[2], sz[1] * sz[0], cvtype, (void*)output.buffer);
         auto matMaskBuffer = Mat(sz[2], sz[1] * sz[0], CV_8U, (void*)mask.buffer);
-        bitwise_and(matInputBuffer, matInputBuffer, matOutputBuffer, matMaskBuffer);
+        Mat matMask;
+        if (!invert)
+            matMask = matMaskBuffer;
+        else
+            bitwise_not(matMaskBuffer, matMask);
+        bitwise_and(matInputBuffer, matInputBuffer, matOutputBuffer, matMask);
+        return true;
+    }
+    catch(...)
+    {
+        cerr << "ERROR: Unkown exception, probably related to OPENCV functions." << endl;
+        output.clear();
+        return false;
+    }
+}
+
+bool maxProjection8bit(const QcImage& input, QcImage& output)
+{
+    try
+    {
+        const auto& sz = input.sz;
+        output.clear();
+        output.create(sz, V3D_UINT8);
+        int cvtype;
+        switch (input.datatype)
+        {
+            case V3D_UINT8:
+                cvtype = CV_8U;
+                break;
+            case V3D_UINT16:
+                cvtype = CV_16U;
+                break;
+            case V3D_FLOAT32:
+                cvtype = CV_32F;
+                break;
+            default:
+                cvtype = CV_8U;
+        }
+        auto matInputBuffer = Mat(sz[2], sz[1] * sz[0], cvtype, (void*)input.buffer);
+        auto matOutputBuffer = Mat(1, sz[1] * sz[0], CV_8U, (void*)output.buffer);
+        double max[matOutputBuffer.cols], maxmax = 0;
+        for (int i = 0; i < matOutputBuffer.cols; ++i)
+        {
+            double min;
+            minMaxLoc(matInputBuffer.col(i), &min, max + i);
+            if (max[i] > maxmax) maxmax = max[i];
+        }
+        for (int i = 0; i < matOutputBuffer.cols; ++i)
+            matOutputBuffer.at<uchar>(0, i) = max[i] * 255 / maxmax;
         return true;
     }
     catch(...)

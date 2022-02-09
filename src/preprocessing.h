@@ -10,6 +10,9 @@
 #include "TeraQCTypes.h"
 
 bool findMarkers(const QcImage& input, QcImage& output, const QVariantMap& params);
-bool masking(const QcImage& input, QcImage& output, const QcImage& mask);
+
+bool masking(const QcImage& input, QcImage& output, const QcImage& mask, bool invert=true);
+
+bool maxProjection8bit(const QcImage& input, QcImage& output);
 
 #endif // PREPROCESSING_H

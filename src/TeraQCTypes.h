@@ -16,6 +16,10 @@ struct QcImage
     {
         for(int i = 0; i < 4; ++i) sz[i] = 0;
     }
+    ~QcImage()
+    {
+        clear();
+    }
     void create(const V3DLONG sz[4], int datatype)
     {
         for(int i = 0; i < 4; ++i) this->sz[i] = sz[i];
