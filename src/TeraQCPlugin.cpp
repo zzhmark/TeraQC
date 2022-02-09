@@ -152,8 +152,8 @@ bool TeraQCPlugin::dofunc(const QString& func_name,
                 pImg = &imgMasked;
             }
             else pImg = &imgInput;
-            SAVE_IMAGE(imgMaxima, prefix + "_maxima.tif");
             FIND_LOCAL_MAXIMA(*pImg);
+            SAVE_IMAGE(imgMaxima, prefix + "_maxima.tif");
             cout << "Done." << endl;
         }
         else if (func_name == tr("one-pot"))
