@@ -61,7 +61,7 @@ bool loadTeraconvert(const QString& path, QcImage& output, const Loader& loader,
          * each x slicing folder contains the tif image blocks sorted by their z slicings.
         */
 
-        auto ySlicings = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        auto ySlicings = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
 
         for (V3DLONG i = 0, yLen = 0;
              i < ySlicings.size();
@@ -72,7 +72,7 @@ bool loadTeraconvert(const QString& path, QcImage& output, const Loader& loader,
                 throw runtime_error("Directory " + dir.filePath(ySlicings.at(i)).toStdString() +
                       " doesn't exist.\nMaybe the directory is modified during reading.");
 
-            auto xSlicings = dir.entryList(QDir::Dirs| QDir::NoDotAndDotDot);
+            auto xSlicings = dir.entryList(QDir::Dirs| QDir::NoDotAndDotDot, QDir::Name);
 
             for (V3DLONG j = 0, xLen = 0;
                  j < xSlicings.size();
@@ -83,7 +83,7 @@ bool loadTeraconvert(const QString& path, QcImage& output, const Loader& loader,
                     throw runtime_error("Directory " + dir.filePath(xSlicings.at(i)).toStdString() +
                             " doesn't exist.\nMaybe the directory is modified during reading.");
 
-                auto blocks = dir.entryList(QDir::Files);
+                auto blocks = dir.entryList(QDir::Files, QDir::Name);
 
                 for (V3DLONG k = 0, zLen = 0;
                      k < blocks.size();
